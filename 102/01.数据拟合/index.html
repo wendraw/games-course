@@ -1,0 +1,419 @@
+<style>
+  #app {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  #canvas {
+    flex: 1;
+    border: 1px solid #000;
+    cursor: crosshair;
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .info {
+    background: #f0f0f0;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 14px;
+  }
+  .legend {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-top: 10px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-color {
+    width: 20px;
+    height: 3px;
+  }
+  .red {
+    background: red;
+  }
+  .blue {
+    background: blue;
+  }
+  .green {
+    background: green;
+  }
+  .point-count {
+    font-weight: bold;
+    color: #666;
+  }
+  .status-info {
+    font-size: 12px;
+    color: #333;
+    background: #e8f5e8;
+    padding: 4px 8px;
+    border-radius: 3px;
+    border: 1px solid #a8d8a8;
+  }
+  .status-info.warning {
+    background: #fff3cd;
+    border-color: #ffeaa7;
+    color: #856404;
+  }
+</style>
+<script type="importmap">
+  {
+    "imports": {
+      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
+    }
+  }
+</script>
+<div id="app">
+  <div class="info">
+    <h3>数据拟合演示</h3>
+    <p>点击画布添加数据点，选择不同的拟合方法查看效果：</p>
+    <ul>
+      <li>
+        <strong>插值型拟合</strong>：使用拉格朗日插值，曲线必须通过所有数据点
+      </li>
+      <li>
+        <strong>逼近型拟合</strong>：使用最小二乘法，寻找最佳拟合的二次多项式
+      </li>
+    </ul>
+  </div>
+
+  <div class="controls">
+    <button @click="clearCanvas">清除画布</button>
+    <select v-model="selectedFunction">
+      <option value="interpolation">插值型拟合</option>
+      <option value="approximation">逼近型拟合</option>
+    </select>
+    <span class="point-count">数据点: {{ points.length }}</span>
+    <span class="status-info" :class="{ 'warning': !canFit }">
+      {{ statusMessage }}
+    </span>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color red"></div>
+      <span>数据点</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color blue"></div>
+      <span>插值型拟合</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color green"></div>
+      <span>逼近型拟合</span>
+    </div>
+  </div>
+
+  <canvas id="canvas" ref="canvasRef" @click="handleCanvasClick"></canvas>
+</div>
+
+<script type="module">
+  import { createApp, ref, useTemplateRef, onMounted, computed } from 'vue'
+
+  createApp({
+    setup() {
+      const canvasRef = ref(null)
+      const ctx = ref(null)
+      const points = ref([])
+      const selectedFunction = ref('interpolation')
+
+      const canFit = computed(() => {
+        if (selectedFunction.value === 'interpolation') {
+          return points.value.length >= 2
+        } else {
+          return points.value.length >= 2
+        }
+      })
+
+      const statusMessage = computed(() => {
+        const count = points.value.length
+        if (count === 0) {
+          return '点击画布添加数据点'
+        } else if (count === 1) {
+          return '至少需要2个点进行拟合'
+        } else if (selectedFunction.value === 'interpolation') {
+          return `插值拟合 (${count}次多项式)`
+        } else {
+          return count >= 3 ? `二次多项式拟合` : `线性拟合`
+        }
+      })
+
+      const functions = {
+        // 拉格朗日插值（插值型拟合）
+        interpolation: (points, x) => {
+          if (points.length === 0) return 0
+          if (points.length === 1) return points[0].y
+
+          let result = 0
+          for (let i = 0; i < points.length; i++) {
+            let term = points[i].y
+            for (let j = 0; j < points.length; j++) {
+              if (i !== j) {
+                const denominator = points[i].x - points[j].x
+                if (Math.abs(denominator) < 1e-10) {
+                  // 避免除零错误
+                  return points[i].y
+                }
+                term *= (x - points[j].x) / denominator
+              }
+            }
+            result += term
+          }
+          return result
+        },
+
+        // 最小二乘法多项式拟合（逼近型拟合）
+        approximation: (points, x) => {
+          if (points.length === 0) return 0
+          if (points.length === 1) return points[0].y
+          if (points.length === 2) {
+            // 两点时使用线性拟合
+            const [p1, p2] = points
+            const slope = (p2.y - p1.y) / (p2.x - p1.x)
+            return p1.y + slope * (x - p1.x)
+          }
+
+          // 使用二次多项式拟合 y = ax² + bx + c
+          const n = points.length
+          let sumX = 0,
+            sumY = 0,
+            sumX2 = 0,
+            sumX3 = 0,
+            sumX4 = 0
+          let sumXY = 0,
+            sumX2Y = 0
+
+          for (let i = 0; i < n; i++) {
+            const xi = points[i].x
+            const yi = points[i].y
+            sumX += xi
+            sumY += yi
+            sumX2 += xi * xi
+            sumX3 += xi * xi * xi
+            sumX4 += xi * xi * xi * xi
+            sumXY += xi * yi
+            sumX2Y += xi * xi * yi
+          }
+
+          // 解线性方程组
+          const matrix = [
+            [n, sumX, sumX2, sumY],
+            [sumX, sumX2, sumX3, sumXY],
+            [sumX2, sumX3, sumX4, sumX2Y],
+          ]
+
+          try {
+            // 高斯消元法求解
+            const coeffs = gaussElimination(matrix)
+            const a = coeffs[2] || 0
+            const b = coeffs[1] || 0
+            const c = coeffs[0] || 0
+
+            return a * x * x + b * x + c
+          } catch (e) {
+            // 如果求解失败，降级为线性拟合
+            const avgX = sumX / n
+            const avgY = sumY / n
+            const slope = (sumXY - n * avgX * avgY) / (sumX2 - n * avgX * avgX)
+            const intercept = avgY - slope * avgX
+            return slope * x + intercept
+          }
+        },
+      }
+
+      // 高斯消元法求解线性方程组
+      function gaussElimination(matrix) {
+        const n = matrix.length
+        const eps = 1e-10
+
+        // 前向消元
+        for (let i = 0; i < n; i++) {
+          // 找到主元
+          let maxRow = i
+          for (let k = i + 1; k < n; k++) {
+            if (Math.abs(matrix[k][i]) > Math.abs(matrix[maxRow][i])) {
+              maxRow = k
+            }
+          }
+
+          // 检查主元是否为零
+          if (Math.abs(matrix[maxRow][i]) < eps) {
+            throw new Error('Matrix is singular')
+          }
+
+          // 交换行
+          if (maxRow !== i) {
+            ;[matrix[i], matrix[maxRow]] = [matrix[maxRow], matrix[i]]
+          }
+
+          // 消元
+          for (let k = i + 1; k < n; k++) {
+            const factor = matrix[k][i] / matrix[i][i]
+            for (let j = i; j < n + 1; j++) {
+              matrix[k][j] -= factor * matrix[i][j]
+            }
+          }
+        }
+
+        // 回代
+        const result = new Array(n)
+        for (let i = n - 1; i >= 0; i--) {
+          result[i] = matrix[i][n]
+          for (let j = i + 1; j < n; j++) {
+            result[i] -= matrix[i][j] * result[j]
+          }
+
+          if (Math.abs(matrix[i][i]) < eps) {
+            throw new Error('Matrix is singular')
+          }
+
+          result[i] /= matrix[i][i]
+        }
+
+        return result
+      }
+
+      const initCanvas = () => {
+        if (canvasRef.value) {
+          ctx.value = canvasRef.value.getContext('2d')
+          canvasRef.value.width = canvasRef.value.clientWidth
+          canvasRef.value.height = canvasRef.value.clientHeight
+        }
+      }
+
+      onMounted(() => {
+        initCanvas()
+      })
+
+      const handleCanvasClick = (e) => {
+        if (!canvasRef.value) {
+          console.warn('Canvas not ready yet')
+          return
+        }
+
+        if (!ctx.value) {
+          initCanvas()
+        }
+
+        const x = e.offsetX
+        const y = e.offsetY
+
+        // 检查是否有相同x坐标的点（避免拉格朗日插值出错）
+        const existingPoint = points.value.find((p) => Math.abs(p.x - x) < 5)
+        if (existingPoint) {
+          // 更新现有点的y坐标
+          existingPoint.y = y
+        } else {
+          points.value.push({ x, y })
+        }
+
+        // 按x坐标排序
+        points.value.sort((a, b) => a.x - b.x)
+
+        render()
+      }
+
+      function render() {
+        if (!ctx.value || !canvasRef.value) return
+
+        ctx.value.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
+
+        // 绘制数据点
+        for (let i = 0; i < points.value.length; i++) {
+          const p = points.value[i]
+          ctx.value.fillStyle = 'red'
+          ctx.value.beginPath()
+          ctx.value.arc(p.x, p.y, 4, 0, 2 * Math.PI)
+          ctx.value.fill()
+          ctx.value.closePath()
+        }
+
+        // 绘制拟合曲线
+        if (points.value.length >= 2) {
+          const fn = functions[selectedFunction.value]
+
+          // 找到x的范围
+          const xValues = points.value.map((p) => p.x)
+          const minX = Math.min(...xValues)
+          const maxX = Math.max(...xValues)
+          const range = maxX - minX
+          const startX = minX - range * 0.1
+          const endX = maxX + range * 0.1
+
+          // 绘制拟合曲线
+          ctx.value.strokeStyle =
+            selectedFunction.value === 'interpolation' ? 'blue' : 'green'
+          ctx.value.lineWidth = 2
+          ctx.value.beginPath()
+
+          const step = (endX - startX) / 200
+          let firstPoint = true
+
+          for (let x = startX; x <= endX; x += step) {
+            try {
+              const y = fn(points.value, x)
+              if (isFinite(y)) {
+                if (firstPoint) {
+                  ctx.value.moveTo(x, y)
+                  firstPoint = false
+                } else {
+                  ctx.value.lineTo(x, y)
+                }
+              }
+            } catch (e) {
+              // 跳过无效点
+            }
+          }
+
+          ctx.value.stroke()
+        }
+
+        // 绘制点之间的连线（用于参考）
+        ctx.value.strokeStyle = 'rgba(255, 0, 0, 0.3)'
+        ctx.value.lineWidth = 1
+        for (let i = 0; i < points.value.length - 1; i++) {
+          const p1 = points.value[i]
+          const p2 = points.value[i + 1]
+          ctx.value.beginPath()
+          ctx.value.moveTo(p1.x, p1.y)
+          ctx.value.lineTo(p2.x, p2.y)
+          ctx.value.stroke()
+        }
+      }
+
+      const clearCanvas = () => {
+        if (ctx.value && canvasRef.value) {
+          ctx.value.clearRect(
+            0,
+            0,
+            canvasRef.value.width,
+            canvasRef.value.height
+          )
+        }
+        points.value = []
+      }
+
+      return {
+        canvasRef,
+        handleCanvasClick,
+        clearCanvas,
+        selectedFunction,
+        functions,
+        points,
+        canFit,
+        statusMessage,
+      }
+    },
+  }).mount('#app')
+</script>
