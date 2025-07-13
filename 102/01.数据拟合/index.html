@@ -19,6 +19,27 @@
     align-items: center;
     flex-wrap: wrap;
   }
+  .polynomial-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #f8f9fa;
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 1px solid #dee2e6;
+  }
+  .polynomial-control label {
+    font-size: 12px;
+    color: #495057;
+    font-weight: 500;
+  }
+  .polynomial-control select {
+    font-size: 12px;
+    padding: 2px 5px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    background: white;
+  }
   .info {
     background: #f0f0f0;
     padding: 10px;
@@ -66,6 +87,33 @@
     border-color: #ffeaa7;
     color: #856404;
   }
+  .degree-input {
+    width: 50px;
+    padding: 4px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    font-size: 12px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .degree-input:focus {
+    outline: none;
+    border-color: #4caf50;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+  }
+  .degree-hint {
+    font-size: 10px;
+    color: #6c757d;
+    white-space: nowrap;
+  }
+  .high-degree-warning {
+    font-size: 11px;
+    color: #856404;
+    background: #fff3cd;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #ffeaa7;
+  }
 </style>
 <script type="importmap">
   {
@@ -94,6 +142,19 @@
       <option value="interpolation">插值型拟合</option>
       <option value="approximation">逼近型拟合</option>
     </select>
+    <div v-if="selectedFunction === 'approximation'" class="polynomial-control">
+      <label>多项式次数:</label>
+      <input
+        type="number"
+        v-model="polynomialDegree"
+        min="1"
+        max="20"
+        step="1"
+        class="degree-input"
+        @input="validateDegree"
+      />
+      <span class="degree-hint">次 (1-20)</span>
+    </div>
     <span class="point-count">数据点: {{ points.length }}</span>
     <span class="status-info" :class="{ 'warning': !canFit }">
       {{ statusMessage }}
@@ -111,7 +172,16 @@
     </div>
     <div class="legend-item">
       <div class="legend-color green"></div>
-      <span>逼近型拟合</span>
+      <span
+        >逼近型拟合{{ selectedFunction === 'approximation' ? `
+        (${polynomialDegree}次)` : '' }}</span
+      >
+    </div>
+    <div
+      v-if="selectedFunction === 'approximation' && polynomialDegree > 5"
+      class="legend-item"
+    >
+      <span class="high-degree-warning">⚠️ 高次多项式可能过拟合</span>
     </div>
   </div>
 
@@ -127,25 +197,45 @@
       const ctx = ref(null)
       const points = ref([])
       const selectedFunction = ref('interpolation')
+      const polynomialDegree = ref(2)
+
+      const validateDegree = () => {
+        const value = parseInt(polynomialDegree.value)
+        if (isNaN(value) || value < 1) {
+          polynomialDegree.value = 1
+        } else if (value > 20) {
+          polynomialDegree.value = 20
+        } else {
+          polynomialDegree.value = value
+        }
+      }
 
       const canFit = computed(() => {
+        const degree = parseInt(polynomialDegree.value) || 1
         if (selectedFunction.value === 'interpolation') {
           return points.value.length >= 2
         } else {
-          return points.value.length >= 2
+          return points.value.length >= degree + 1
         }
       })
 
       const statusMessage = computed(() => {
         const count = points.value.length
+        const degree = parseInt(polynomialDegree.value) || 1
+
         if (count === 0) {
           return '点击画布添加数据点'
-        } else if (count === 1) {
-          return '至少需要2个点进行拟合'
         } else if (selectedFunction.value === 'interpolation') {
-          return `插值拟合 (${count}次多项式)`
+          if (count === 1) {
+            return '至少需要2个点进行插值拟合'
+          }
+          return `插值拟合 (${count - 1}次多项式)`
         } else {
-          return count >= 3 ? `二次多项式拟合` : `线性拟合`
+          const minPoints = degree + 1
+          if (count < minPoints) {
+            return `${degree}次多项式至少需要${minPoints}个点`
+          }
+          return `${degree}次多项式拟合`
         }
       })
 
@@ -173,61 +263,77 @@
           return result
         },
 
-        // 最小二乘法多项式拟合（逼近型拟合）
+        // 任意次数多项式最小二乘法拟合
         approximation: (points, x) => {
           if (points.length === 0) return 0
           if (points.length === 1) return points[0].y
-          if (points.length === 2) {
-            // 两点时使用线性拟合
-            const [p1, p2] = points
-            const slope = (p2.y - p1.y) / (p2.x - p1.x)
-            return p1.y + slope * (x - p1.x)
+
+          const degree = parseInt(polynomialDegree.value) || 1
+          const n = points.length
+
+          // 检查是否有足够的点进行拟合
+          if (n < degree + 1) {
+            // 降级到线性拟合
+            if (n >= 2) {
+              return linearFit(points, x)
+            }
+            return points[0].y
           }
 
-          // 使用二次多项式拟合 y = ax² + bx + c
-          const n = points.length
-          let sumX = 0,
-            sumY = 0,
-            sumX2 = 0,
-            sumX3 = 0,
-            sumX4 = 0
-          let sumXY = 0,
-            sumX2Y = 0
+          // 对于高次多项式，添加数值稳定性检查
+          if (degree > 10 && n > 50) {
+            console.warn('高次多项式拟合可能存在数值稳定性问题')
+          }
+
+          // 计算各种x的幂次和
+          const sums = new Array(2 * degree + 1).fill(0)
+          const sumY = new Array(degree + 1).fill(0)
 
           for (let i = 0; i < n; i++) {
             const xi = points[i].x
             const yi = points[i].y
-            sumX += xi
-            sumY += yi
-            sumX2 += xi * xi
-            sumX3 += xi * xi * xi
-            sumX4 += xi * xi * xi * xi
-            sumXY += xi * yi
-            sumX2Y += xi * xi * yi
+
+            let xPower = 1
+            for (let j = 0; j <= 2 * degree; j++) {
+              sums[j] += xPower
+              xPower *= xi
+            }
+
+            // 计算 x^j * y 的和
+            xPower = 1
+            for (let j = 0; j <= degree; j++) {
+              sumY[j] += yi * xPower
+              xPower *= xi
+            }
           }
 
-          // 解线性方程组
-          const matrix = [
-            [n, sumX, sumX2, sumY],
-            [sumX, sumX2, sumX3, sumXY],
-            [sumX2, sumX3, sumX4, sumX2Y],
-          ]
+          // 构造系数矩阵 (degree+1) × (degree+1)
+          const matrix = []
+          for (let i = 0; i <= degree; i++) {
+            const row = []
+            for (let j = 0; j <= degree; j++) {
+              row.push(sums[i + j])
+            }
+            row.push(sumY[i])
+            matrix.push(row)
+          }
 
           try {
-            // 高斯消元法求解
+            // 求解线性方程组
             const coeffs = gaussElimination(matrix)
-            const a = coeffs[2] || 0
-            const b = coeffs[1] || 0
-            const c = coeffs[0] || 0
 
-            return a * x * x + b * x + c
+            // 计算多项式值
+            let result = 0
+            let xPower = 1
+            for (let i = 0; i <= degree; i++) {
+              result += (coeffs[i] || 0) * xPower
+              xPower *= x
+            }
+
+            return result
           } catch (e) {
-            // 如果求解失败，降级为线性拟合
-            const avgX = sumX / n
-            const avgY = sumY / n
-            const slope = (sumXY - n * avgX * avgY) / (sumX2 - n * avgX * avgX)
-            const intercept = avgY - slope * avgX
-            return slope * x + intercept
+            console.warn('高次多项式求解失败，降级到线性拟合')
+            return linearFit(points, x)
           }
         },
       }
@@ -282,6 +388,33 @@
         }
 
         return result
+      }
+
+      // 线性拟合辅助函数
+      function linearFit(points, x) {
+        const n = points.length
+        if (n < 2) return points[0]?.y || 0
+
+        let sumX = 0,
+          sumY = 0,
+          sumXY = 0,
+          sumX2 = 0
+
+        for (let i = 0; i < n; i++) {
+          const xi = points[i].x
+          const yi = points[i].y
+          sumX += xi
+          sumY += yi
+          sumXY += xi * yi
+          sumX2 += xi * xi
+        }
+
+        const avgX = sumX / n
+        const avgY = sumY / n
+        const slope = (sumXY - n * avgX * avgY) / (sumX2 - n * avgX * avgX)
+        const intercept = avgY - slope * avgX
+
+        return slope * x + intercept
       }
 
       const initCanvas = () => {
@@ -409,10 +542,12 @@
         handleCanvasClick,
         clearCanvas,
         selectedFunction,
+        polynomialDegree,
         functions,
         points,
         canFit,
         statusMessage,
+        validateDegree,
       }
     },
   }).mount('#app')
