@@ -127,12 +127,8 @@
     <h3>数据拟合演示</h3>
     <p>点击画布添加数据点，选择不同的拟合方法查看效果：</p>
     <ul>
-      <li>
-        <strong>插值型拟合</strong>：使用拉格朗日插值，曲线必须通过所有数据点
-      </li>
-      <li>
-        <strong>逼近型拟合</strong>：使用最小二乘法，寻找最佳拟合的二次多项式
-      </li>
+      <li><strong>插值型拟合</strong>：使用拉格朗日插值，曲线必须通过所有数据点</li>
+      <li><strong>逼近型拟合</strong>：使用最小二乘法，寻找最佳拟合的二次多项式</li>
     </ul>
   </div>
 
@@ -156,9 +152,7 @@
       <span class="degree-hint">次 (1-20)</span>
     </div>
     <span class="point-count">数据点: {{ points.length }}</span>
-    <span class="status-info" :class="{ 'warning': !canFit }">
-      {{ statusMessage }}
-    </span>
+    <span class="status-info" :class="{ 'warning': !canFit }"> {{ statusMessage }} </span>
   </div>
 
   <div class="legend">
@@ -172,15 +166,9 @@
     </div>
     <div class="legend-item">
       <div class="legend-color green"></div>
-      <span
-        >逼近型拟合{{ selectedFunction === 'approximation' ? `
-        (${polynomialDegree}次)` : '' }}</span
-      >
+      <span>逼近型拟合{{ selectedFunction === 'approximation' ? ` (${polynomialDegree}次)` : '' }}</span>
     </div>
-    <div
-      v-if="selectedFunction === 'approximation' && polynomialDegree > 5"
-      class="legend-item"
-    >
+    <div v-if="selectedFunction === 'approximation' && polynomialDegree > 5" class="legend-item">
       <span class="high-degree-warning">⚠️ 高次多项式可能过拟合</span>
     </div>
   </div>
@@ -485,8 +473,7 @@
           const endX = maxX + range * 0.1
 
           // 绘制拟合曲线
-          ctx.value.strokeStyle =
-            selectedFunction.value === 'interpolation' ? 'blue' : 'green'
+          ctx.value.strokeStyle = selectedFunction.value === 'interpolation' ? 'blue' : 'green'
           ctx.value.lineWidth = 2
           ctx.value.beginPath()
 
@@ -527,12 +514,7 @@
 
       const clearCanvas = () => {
         if (ctx.value && canvasRef.value) {
-          ctx.value.clearRect(
-            0,
-            0,
-            canvasRef.value.width,
-            canvasRef.value.height
-          )
+          ctx.value.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
         }
         points.value = []
       }
