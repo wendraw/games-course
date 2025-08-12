@@ -57,7 +57,8 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-08-14',
 
   nitro: {
-    preset: 'static',
+    // Netlify 部署配置
+    preset: 'netlify',
     prerender: {
       crawlLinks: true,
       routes: ['/'],
