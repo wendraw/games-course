@@ -7,7 +7,10 @@ const { data: page } = await useAsyncData(route.path, () => {
 
 <template>
   <div v-if="page" class="mx-auto px-4 py-8 container max-w-4xl">
-    <ContentRenderer :value="page" prose />
+    <ContentRenderer
+      :value="page"
+      class="max-w-none prose dark:prose-invert"
+    />
   </div>
   <div v-else class="mx-auto px-4 py-8 text-center container max-w-4xl">
     <div class="empty-page">
