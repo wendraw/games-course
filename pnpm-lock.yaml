@@ -40,6 +40,9 @@ catalogs:
     lint-staged:
       specifier: ^16.1.5
       version: 16.1.5
+    simple-git-hooks:
+      specifier: ^2.13.1
+      version: 2.13.1
   dev:
     '@antfu/eslint-config':
       specifier: ^4.17.0
@@ -144,7 +147,7 @@ importers:
         specifier: catalog:frontend
         version: 3.0.3(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       simple-git-hooks:
-        specifier: ^2.13.1
+        specifier: 'catalog:'
         version: 2.13.1
       typescript:
         specifier: catalog:dev
