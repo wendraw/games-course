@@ -57,13 +57,9 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-08-14',
 
   nitro: {
-    esbuild: {
-      options: {
-        target: 'esnext',
-      },
-    },
+    preset: 'static',
     prerender: {
-      crawlLinks: false,
+      crawlLinks: true,
       routes: ['/'],
       ignore: ['/hi'],
     },
